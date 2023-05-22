@@ -1,0 +1,126 @@
+#随机网络
+Random_network_generater_NP<-function(N,P){
+  g<-erdos.renyi.game(N,P,type = "gnp",directed = F,loops=F)
+  V(g)$color<-"red"#设置顶点颜色
+  V(g)$size<-2#设置顶点大小
+  #E(g)$color<-"grey"#设置边颜色
+  #plot(g,layout=layout.random,repel = T)
+  return(g)
+}
+Random_network_generater_NM<-function(N,M){
+  g<-erdos.renyi.game(N,M,type = "gnm",directed = F,loops=F)
+  V(g)$color<-"red"#设置顶点颜色
+  V(g)$size<-2#设置顶点大小
+  #E(g)$color<-"grey"#设置边颜色
+  #plot(g,layout=layout.random,repel = T)
+  return(g)
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+node_calculate<-function(network){
+  x<-data.frame(node<-1:100,degree<-c(rep(0,100)))
+  for(i in 1:100){
+    x[i,2]<-sum(as_adjacency_matrix(network)[i,])
+  }
+  return(x)
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+list_network<-vector("list", 1000)#存储网络
+list_x<-vector("list", 1000)#存储网络中每个点的度
+list_edge<-vector("list", 1000)#存储网络中的边数
+list_adjacency_matrix<-vector("list", 1000)#存储网络所对应的邻接矩阵
+
+#构建部分
+for (i in 1:1000) {
+  a<-Random_network_generater(100,200)
+  list_network[[i]]<-a##获取网络
+  list_edge[[i]]<-as_data_frame(a, what="edges")##获取边数
+  list_adjacency_matrix[[i]]<-as_adjacency_matrix(a)##数据转化为邻接矩阵
+  list_x[[i]]<-node_calculate(a)##获取网络中每个点的度
+}
+
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+
+#模块化网络
+Modular_network_generater<-function(S,a,Q,connectance,Eyeball){
+  #S<-100节点数
+  #K <- matrix(0, S, S)   邻接矩阵
+  #a<-0.4   某一子网在整体所占的比例
+  #Q<-0.4   选择的模块化modularity
+  #connectance<-0.1   网络整体连接度
+  #Eyeball<-FALSE，  Eyeball的T或F代表是否将邻接矩阵中的节点重拍
+  Cw <- round(connectance * (Q / (a^2 + (1-a)^2) + 1), 6) #模块子网内的节点交流的概率
+  Cb <- round(connectance * (-Q / (2 * a * (1-a)) + 1), 6) #模块子网间的节点交流的概率
+  # vector or membership
+  membership <- (0:(S-1)) / S  #对S个节点属性进行均度分配
+  membership[membership >= a] <- 2 #对假设二子网的节点属性赋2
+  membership[membership < 1] <- 1 #相对的一子网节点属性赋1
+  size1 <- sum(membership == 1) #得到一子网的节点数
+  size2 <- sum(membership == 2) #二子网的节点数
+  # If this is an Eyeball matrix, scramble the pairs，当然也可以不用执行
+  if (Eyeball == TRUE) {
+    membership <- sample(membership)
+  }
+  
+  K <- matrix(0, S, S) #整体网络的邻接矩阵
+  K11 <- K[membership == 1, membership == 1] #一子网的矩阵
+  #upper.tri(K11)是选取K11的右上三角矩阵
+  K11[upper.tri(K11)] <- sample(c(
+    rep(1, round(Cw * size1 * (size1 - 1) / 2)),
+    rep(0, size1 * (size1 - 1) / 2))[1:(size1 * (size1 - 1) / 2)])
+  
+  K22 <- K[membership == 2, membership == 2] #二子网的矩阵
+  K22[upper.tri(K22)] <- sample(c(
+    rep(1, round(Cw * size2 * (size2 - 1) / 2)),
+    rep(0, size2 * (size2 - 1) / 2))[1:(size2 * (size2 - 1) / 2)])
+  
+  K12 <- K[membership == 1, membership == 2] #子网间的矩阵,但由于是无向网络，还存在K21
+  K12 <- sample(c(rep(1, round(Cb * size1 * size2 )),
+                  rep(0, size1 * size2 ))[1:(size1 * size2)])
+  K[membership == 1, membership == 1] <- K11
+  K[membership == 2, membership == 2] <- K22
+  K[membership == 1, membership == 2] <- K12
+  K <- K + t(K) #此处通过K加上K的转置矩阵由此补全K11和K22所对应的左下三角矩阵与K21
+  network<-graph_from_adjacency_matrix(K,mode = "undirected",diag = F) #利用该函数从邻接矩阵生成网络
+  return(network)
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+modular_list_network<-vector("list", 6)
+modular_list_x<-vector("list", 6)
+modular_list_edge<-vector("list", 6)
+modular_list_adjacency_matrix<-vector("list", 6)
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+j<-0
+for (Q in seq(0.29,0.49,by=0.04)){
+  list_network<-vector("list", 1000)#存储网络
+  list_x<-vector("list", 1000)#存储网络中每个点的度
+  list_edge<-vector("list", 1000)#存储网络中的边数
+  list_adjacency_matrix<-vector("list", 1000)#存储网络所对应的邻接矩阵
+  for (i in 1:1000) {
+    a<-Modular_network_generater(100,0.5,Q,0.1,FALSE)
+    list_network[[i]]<-a##获取网络
+    list_edge[[i]]<-as_data_frame(a, what="edges")##获取边数
+    list_adjacency_matrix[[i]]<-as_adjacency_matrix(a)##数据转化为邻接矩阵
+    list_x[[i]]<-node_calculate(a)##获取网络中每个点的度
+  }
+  j<-j+1
+  modular_list_network[[j]]<-list_network
+  modular_list_x[[j]]<-list_x
+  modular_list_edge[[j]]<-list_edge
+  modular_list_adjacency_matrix[[j]]<-list_adjacency_matrix
+}
+
+plot(list_network[[1]])
+V(list_network[[1]])$size<-7
+modular_list_network[[4]][[1]]
+V(modular_list_network[[4]][[1]])$size<-7
+plot(modular_list_network[[4]][[1]])
+V(modular_list_network[[4]][[1]])$color<-"red"
